@@ -170,6 +170,7 @@ export default function App() {
     return (
       <div className={`login${loading ? " busy" : ""}`}>
         <div className={`progress${loading ? " on" : ""}`} />
+        <img className="logo big" src="/logo.svg" alt="Xoay Key" />
         <h1>Xoay Key</h1>
         <p className="sub">Đăng nhập để quản lý key Groq</p>
         <form onSubmit={login}>
@@ -197,9 +198,12 @@ export default function App() {
     <div className={`wrap${loading ? " busy" : ""}`}>
       <div className={`progress${loading ? " on" : ""}`} />
       <div className="head">
-        <div>
-          <h1>Xoay Key</h1>
-          <p className="sub">Key Groq tự đổi khi hết token.</p>
+        <div className="brand">
+          <img className="logo" src="/logo.svg" alt="" />
+          <div>
+            <h1>Xoay Key</h1>
+            <p className="sub">Key Groq tự đổi khi hết token.</p>
+          </div>
         </div>
         <div className="stats">
           <span className="chip"><b>{ready.length}</b> sẵn sàng</span>
@@ -251,7 +255,7 @@ export default function App() {
       <section className="panel">
         {keys === null ? (
           <div className="skel">
-            <div className="loadmsg"><span className="spin" />Đang tải danh sách key...</div>
+            <div className="loadmsg"><img className="logo spinlogo" src="/logo.svg" alt="" />Đang tải danh sách key...</div>
             {[0, 1, 2].map((i) => <div key={i} className="skrow" />)}
           </div>
         ) : rows.length ? (
