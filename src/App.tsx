@@ -264,7 +264,7 @@ export default function App() {
               const s = kind(k);
               const isOpen = open === k._id;
               return (
-                <li className="item" key={k._id}>
+                <li className={`item${isOpen ? " open" : ""}`} key={k._id}>
                   <div className="irow">
                     <span className={`dot ${s}`} />
                     <button className="main toggle" onClick={() => setOpen(isOpen ? null : k._id)} aria-expanded={isOpen}>

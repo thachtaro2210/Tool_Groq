@@ -139,6 +139,16 @@ details[open].panel > summary::after { content: "−"; }
 .mchip { font: 12px ui-monospace, Consolas, monospace; background: var(--sunk); border: 1px solid var(--bd); border-radius: 8px; padding: 2px 8px; }
 .drow { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 
+/* Mở rộng: key một bên, thanh + model một bên */
+.wrap { max-width: 980px; }
+@media (min-width: 761px) {
+  .item.open { display: grid; grid-template-columns: minmax(300px, 5fr) 7fr; align-items: stretch; background: var(--sunk); }
+  .item.open .irow { align-items: flex-start; flex-wrap: wrap; align-content: flex-start; padding: 20px; }
+  .item.open .main { flex-basis: 0; min-width: 180px; }
+  .item.open .acts { width: 100%; justify-content: flex-start; padding-left: 23px; margin-top: 6px; }
+  .item.open .detail { padding: 20px 22px; gap: 16px; border-left: 1px solid var(--bd); background: var(--surface); align-content: start; }
+}
+
 @media (max-width: 560px) {
   .irow { flex-wrap: wrap; padding: 14px 16px; }
   .detail { padding: 4px 16px 16px; }
