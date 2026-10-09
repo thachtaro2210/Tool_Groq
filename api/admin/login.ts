@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { endSession, safeEqual, startSession, totpEnabled, verifyTotp } from "../_lib/auth.js";
-import { audit, clientIp, hit, peek, safe } from "../_lib/guard.js";
+import { audit, safe } from "../_lib/guard.js";
 
 /**
  * GET    -> { otp }       có yêu cầu mã 2FA không
@@ -18,12 +18,6 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method !== "POST") return void res.status(405).json({ error: "Method not allowed" });
 
-  const ip = clientIp(req);
-  if ((await peek(`lf:${ip}`, 900)) >= 5) {
-    await audit(req, "login", false, "locked");
-    return void res.status(429).json({ error: "Sai quá nhiều lần, thử lại sau 15 phút" });
-  }
-
   const { username, password, otp } = req.body ?? {};
   const u = process.env.ADMIN_USER || "admin";
   const p = process.env.ADMIN_PASSWORD;
@@ -32,7 +26,6 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   const okPass = !!p && p.length >= 12 && safeEqual(String(password ?? ""), p);
   const okOtp = totpEnabled() ? await verifyTotp(String(otp ?? "")) : true;
   if (!okUser || !okPass || !okOtp) {
-    await hit(`lf:${ip}`, 900);
     await audit(req, "login", false);
     await new Promise((r) => setTimeout(r, 600));
     return void res.status(401).json({ error: "Sai thông tin đăng nhập" });
