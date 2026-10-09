@@ -69,20 +69,23 @@ function Detail({ c, busy, onCheck }: { c?: Check; busy: boolean; onCheck: () =>
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("token") ?? "");
-  const [authed, setAuthed] = useState(false);
-  const [booting, setBooting] = useState(() => !!localStorage.getItem("token"));
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [keys, setKeys] = useState<Key[]>([]);
+  const [keys, setKeys] = useState<Key[] | null>(null); // null = đang tải lần đầu
   const [text, setText] = useState("");
   const [results, setResults] = useState<{ key: string; res: Check }[] | null>(null);
-  const [checking, setChecking] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
   const timer = useRef<number>();
+
+  // Một bộ đếm loading dùng chung cho mọi thao tác (đăng nhập, tải, thêm, kiểm tra, xoá...)
+  const [pending, setPending] = useState(0);
+  const loading = pending > 0;
+  const track = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    setPending((p) => p + 1);
+    try { return await fn(); } finally { setPending((p) => p - 1); }
+  };
 
   const say = (m: string) => {
     setToast(m);
@@ -98,72 +101,59 @@ export default function App() {
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await r.json().catch(() => ({}));
-      if (r.status === 401) logout();
+      if (r.status === 401) logout("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại");
       if (!r.ok) throw new Error(data.error ?? `Lỗi ${r.status}`);
       return data;
     },
     [token], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  function logout() {
+  function logout(reason = "") {
     localStorage.removeItem("token");
-    setToken(""); setAuthed(false); setKeys([]);
+    setToken(""); setKeys(null); setOpen(null); setResults(null); setErr(reason);
   }
 
-  const login = async (e: React.FormEvent) => {
+  const login = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoggingIn(true); setErr("");
-    try {
-      const r = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: user.trim(), password: pass }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error ?? `Lỗi ${r.status}`);
-      localStorage.setItem("token", data.token);
-      setPass("");
-      setToken(data.token);
-    } catch (e2) { setErr((e2 as Error).message); }
-    setLoggingIn(false);
+    setErr("");
+    return track(async () => {
+      try {
+        const r = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: user.trim(), password: pass }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error ?? `Lỗi ${r.status}`);
+        localStorage.setItem("token", data.token);
+        setPass("");
+        setToken(data.token); // vào panel ngay, effect bên dưới sẽ tải danh sách
+      } catch (e2) { setErr((e2 as Error).message); }
+    });
   };
   const api = (method = "GET", body?: unknown, qs = "") => call("keys", method, body, qs);
 
-  const load = useCallback(async () => {
-    try {
-      setKeys(await call("keys"));
-      setAuthed(true);
-      setErr("");
-    } catch (e) {
-      if (!localStorage.getItem("token")) setErr("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại");
-      else say((e as Error).message);
-    }
-    setBooting(false);
-  }, [call]);
+  const fetchKeys = useCallback(async () => {
+    try { setKeys(await call("keys")); } catch (e) { say((e as Error).message); }
+  }, [call]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (token) void load(); else setBooting(false); }, [token]); // eslint-disable-line
-  useEffect(() => {
-    if (!authed) return;
-    const t = setInterval(() => void load(), 8000);
-    return () => clearInterval(t);
-  }, [authed, load]);
+  useEffect(() => { if (token) void track(fetchKeys); }, [token]); // eslint-disable-line
 
-  const act = async (fn: () => Promise<unknown>, ok?: string) => {
-    try { await fn(); await load(); if (ok) say(ok); } catch (e) { say((e as Error).message); }
-  };
+  const act = (fn: () => Promise<unknown>, ok?: string) =>
+    track(async () => {
+      try { await fn(); await fetchKeys(); if (ok) say(ok); } catch (e) { say((e as Error).message); }
+    });
 
   const parsed = [...new Set(text.split(/[\s,]+/).filter(Boolean))];
 
-  const checkNew = async () => {
-    setChecking(true);
-    try {
-      const res = await Promise.all(
-        parsed.slice(0, 10).map(async (key) => ({ key, res: (await call("check", "POST", { key })) as Check })),
-      );
-      setResults(res);
-    } catch (e) { say((e as Error).message); }
-    setChecking(false);
-  };
+  const checkNew = () =>
+    track(async () => {
+      try {
+        setResults(await Promise.all(
+          parsed.slice(0, 10).map(async (key) => ({ key, res: (await call("check", "POST", { key })) as Check })),
+        ));
+      } catch (e) { say((e as Error).message); }
+    });
 
   const valid = (results ?? []).filter((r) => r.res.ok);
   const save = () => act(async () => {
@@ -172,25 +162,20 @@ export default function App() {
     setText(""); setResults(null);
   }, `Đã lưu ${valid.length} key`);
 
-  const recheck = async (id: string) => {
-    setBusyId(id);
-    try { await call("check", "POST", { id }); await load(); } catch (e) { say((e as Error).message); }
-    setBusyId(null);
-  };
+  const recheck = (id: string) => act(() => call("check", "POST", { id }));
 
   const copy = (s: string) => navigator.clipboard.writeText(s).then(() => say("Đã sao chép"));
 
-  if (booting) return null;
-
-  if (!authed)
+  if (!token)
     return (
-      <div className="login">
+      <div className={`login${loading ? " busy" : ""}`}>
+        <div className={`progress${loading ? " on" : ""}`} />
         <h1>Xoay Key</h1>
         <p className="sub">Đăng nhập để quản lý key Groq</p>
         <form onSubmit={login}>
           <input className="in" autoFocus autoComplete="username" placeholder="Tài khoản" value={user} onChange={(e) => setUser(e.target.value)} />
           <input className="in" type="password" autoComplete="current-password" placeholder="Mật khẩu" value={pass} onChange={(e) => setPass(e.target.value)} />
-          <button className="btn pri" disabled={!user.trim() || !pass || loggingIn}>{loggingIn ? "Đang đăng nhập..." : "Đăng nhập"}</button>
+          <button className="btn pri" disabled={!user.trim() || !pass || loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
         </form>
         {err && <p className="err">{err}</p>}
       </div>
@@ -199,16 +184,18 @@ export default function App() {
   const now = Date.now();
   const kind = (k: Key) =>
     k.status === "invalid" ? "invalid" : k.status === "disabled" ? "off" : k.cooldownUntil > now ? "rest" : "ready";
-  const ready = keys.filter((k) => kind(k) === "ready");
+  const list = keys ?? [];
+  const ready = list.filter((k) => kind(k) === "ready");
   const current = ready.reduce<Key | null>((a, k) => (!a || k.createdAt < a.createdAt ? k : a), null);
-  const rows = [...keys].sort((a, b) => a.createdAt - b.createdAt);
+  const rows = [...list].sort((a, b) => a.createdAt - b.createdAt);
 
   const base = location.origin;
   const snippetGet = `GET ${base}/api/key\nAuthorization: Bearer <PLATFORM_TOKEN>`;
   const snippetFail = `POST ${base}/api/key\nAuthorization: Bearer <PLATFORM_TOKEN>\n\n{ "failedKey": "gsk_...", "retryAfter": 3600 }`;
 
   return (
-    <div className="wrap">
+    <div className={`wrap${loading ? " busy" : ""}`}>
+      <div className={`progress${loading ? " on" : ""}`} />
       <div className="head">
         <div>
           <h1>Xoay Key</h1>
@@ -216,8 +203,8 @@ export default function App() {
         </div>
         <div className="stats">
           <span className="chip"><b>{ready.length}</b> sẵn sàng</span>
-          <span className="chip"><b>{keys.length}</b> tổng</span>
-          <button className="btn sm ghost" onClick={logout}>Đăng xuất</button>
+          <span className="chip"><b>{list.length}</b> tổng</span>
+          <button className="btn sm ghost" onClick={() => logout()}>Đăng xuất</button>
         </div>
       </div>
 
@@ -231,8 +218,8 @@ export default function App() {
               e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
             }}
           />
-          <button className="btn pri" disabled={!parsed.length || checking} onClick={checkNew}>
-            {checking ? "Đang kiểm tra..." : "Kiểm tra"}
+          <button className="btn pri" disabled={!parsed.length || loading} onClick={checkNew}>
+            {loading ? "Đang xử lý..." : "Kiểm tra"}
           </button>
         </div>
 
@@ -262,7 +249,12 @@ export default function App() {
       </section>
 
       <section className="panel">
-        {rows.length ? (
+        {keys === null ? (
+          <div className="skel">
+            <div className="loadmsg"><span className="spin" />Đang tải danh sách key...</div>
+            {[0, 1, 2].map((i) => <div key={i} className="skrow" />)}
+          </div>
+        ) : rows.length ? (
           <ul className="list">
             {rows.map((k) => {
               const s = kind(k);
@@ -295,7 +287,7 @@ export default function App() {
                       <button className="btn sm ghost danger" onClick={() => confirm("Xoá key này?") && act(() => api("DELETE", undefined, `?id=${k._id}`), "Đã xoá")}>Xoá</button>
                     </div>
                   </div>
-                  {isOpen && <Detail c={k.check} busy={busyId === k._id} onCheck={() => recheck(k._id)} />}
+                  {isOpen && <Detail c={k.check} busy={loading} onCheck={() => recheck(k._id)} />}
                 </li>
               );
             })}
