@@ -44,6 +44,8 @@ let ready: Promise<void> | undefined;
 
 async function setup(db: Db) {
   const keys = db.collection<KeyDoc & { key?: string }>("keys");
+  // Index unique cũ trên `key` phải bỏ trước, nếu không việc xoá trường `key` sẽ đụng nhau ở null
+  await keys.dropIndex("key_1").catch(() => {});
   // Chuyển key plaintext cũ sang dạng mã hoá (chạy một lần, idempotent)
   for await (const d of keys.find({ key: { $exists: true } })) {
     await keys.updateOne(
@@ -51,7 +53,6 @@ async function setup(db: Db) {
       { $set: { keyEnc: encrypt(d.key!), keyHash: keyHash(d.key!), keyMask: maskKey(d.key!) }, $unset: { key: "" } },
     );
   }
-  await keys.dropIndex("key_1").catch(() => {});
   await keys.createIndex({ keyHash: 1 }, { unique: true, partialFilterExpression: { keyHash: { $exists: true } } });
   await db.collection("sessions").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
   await db.collection("ratelimit").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
