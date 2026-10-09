@@ -23,7 +23,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   const p = process.env.ADMIN_PASSWORD;
   // Luôn chạy đủ cả ba kiểm tra để không lộ phần nào sai
   const okUser = safeEqual(String(username ?? ""), u);
-  const okPass = !!p && p.length >= 12 && safeEqual(String(password ?? ""), p);
+  const okPass = !!p && p.length >= 6 && safeEqual(String(password ?? ""), p);
   const okOtp = totpEnabled() ? await verifyTotp(String(otp ?? "")) : true;
   if (!okUser || !okPass || !okOtp) {
     await audit(req, "login", false);
