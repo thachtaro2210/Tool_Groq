@@ -1,13 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "../_lib/auth.js";
+import { safe } from "../_lib/guard.js";
 import { encrypt, keyHash } from "../_lib/crypto.js";
 import { keysCol, maskKey } from "../_lib/db.js";
 
 const GROQ_KEY = /^gsk_[A-Za-z0-9]{20,200}$/;
 const oid = (v: unknown) => (ObjectId.isValid(String(v)) ? new ObjectId(String(v)) : null);
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   if (!(await requireAdmin(req, res))) return;
   res.setHeader("Cache-Control", "no-store");
   const col = await keysCol();
@@ -68,3 +69,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(405).json({ error: "Method not allowed" });
 }
+
+export default safe(handler);

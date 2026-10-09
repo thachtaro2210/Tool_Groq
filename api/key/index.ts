@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireToken } from "../_lib/auth.js";
-import { audit } from "../_lib/guard.js";
+import { audit, safe } from "../_lib/guard.js";
 import { currentKey, reportKey } from "../_lib/pool.js";
 
 /**
  * GET  /api/key                         -> { key }
  * POST /api/key  { failedKey, reason?, retryAfter?, message? } -> báo key hỏng + trả key mới { key }
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "GET" && req.method !== "POST") return void res.status(405).json({ error: "Method not allowed" });
   if (!(await requireToken(req, res))) return;
@@ -29,3 +29,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await audit(req, "key", true, req.method === "POST" ? "rotate" : "get");
   res.json({ key: k.key });
 }
+
+export default safe(handler);

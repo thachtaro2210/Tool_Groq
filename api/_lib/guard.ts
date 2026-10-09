@@ -1,4 +1,4 @@
-import type { VercelRequest } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { auditCol, rateCol } from "./db.js";
 
 export function clientIp(req: VercelRequest): string {
@@ -30,4 +30,20 @@ export async function audit(req: VercelRequest, type: string, ok: boolean, note?
       at: new Date(), type, ip: clientIp(req), ok, ua: String(req.headers["user-agent"] ?? "").slice(0, 200), note,
     });
   } catch { /* log không được làm hỏng request */ }
+}
+
+const REQUIRED_ENV = ["MONGODB_URI", "KEY_ENCRYPTION_SECRET", "ADMIN_PASSWORD"] as const;
+
+/** Bọc handler: thiếu cấu hình thì báo rõ tên biến (không lộ giá trị), lỗi khác trả JSON thay vì sập hàm. */
+export function safe(fn: (req: VercelRequest, res: VercelResponse) => Promise<unknown>) {
+  return async (req: VercelRequest, res: VercelResponse) => {
+    try {
+      const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+      if (missing.length) return void res.status(500).json({ error: `Thiếu biến môi trường: ${missing.join(", ")}` });
+      await fn(req, res);
+    } catch (e) {
+      console.error(e);
+      if (!res.headersSent) res.status(500).json({ error: `Lỗi máy chủ: ${(e as Error).message}`.slice(0, 200) });
+    }
+  };
 }

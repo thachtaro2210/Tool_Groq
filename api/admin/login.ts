@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { endSession, safeEqual, startSession, totpEnabled, verifyTotp } from "../_lib/auth.js";
-import { audit, clientIp, hit, peek } from "../_lib/guard.js";
+import { audit, clientIp, hit, peek, safe } from "../_lib/guard.js";
 
 /**
  * GET    -> { otp }       có yêu cầu mã 2FA không
  * POST   -> đăng nhập (đặt cookie HttpOnly)
  * DELETE -> đăng xuất; ?all=1 thu hồi mọi phiên
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method === "GET") return void res.json({ otp: totpEnabled() });
 
@@ -41,3 +41,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await audit(req, "login", true);
   res.json({ ok: true });
 }
+
+export default safe(handler);

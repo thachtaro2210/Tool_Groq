@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "../_lib/auth.js";
+import { safe } from "../_lib/guard.js";
 import { decrypt } from "../_lib/crypto.js";
 import { keysCol } from "../_lib/db.js";
 import { probeKey } from "../_lib/groq.js";
@@ -9,7 +10,7 @@ import { probeKey } from "../_lib/groq.js";
  * POST /api/admin/check { key }  -> kiểm tra key thô (chưa lưu), không ghi DB
  * POST /api/admin/check { id }   -> kiểm tra key đã lưu, lưu kết quả vào DB
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   if (!(await requireAdmin(req, res))) return;
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return void res.status(405).json({ error: "Method not allowed" });
@@ -34,3 +35,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await col.updateOne({ _id }, { $set: set });
   res.json(check);
 }
+
+export default safe(handler);
