@@ -68,7 +68,9 @@ function Detail({ c, busy, onCheck }: { c?: Check; busy: boolean; onCheck: () =>
 }
 
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem("token") ?? "");
+  const [authed, setAuthed] = useState(() => localStorage.getItem("authed") === "1"); // chỉ là cờ giao diện, phiên thật nằm ở cookie HttpOnly
+  const [otpNeeded, setOtpNeeded] = useState(false);
+  const [otp, setOtp] = useState("");
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [keys, setKeys] = useState<Key[] | null>(null); // null = đang tải lần đầu
@@ -97,7 +99,7 @@ export default function App() {
     async (path: string, method = "GET", body?: unknown, qs = "") => {
       const r = await fetch(`/api/admin/${path}${qs}`, {
         method,
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", "x-requested-with": "xoaykey" },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await r.json().catch(() => ({}));
@@ -105,12 +107,13 @@ export default function App() {
       if (!r.ok) throw new Error(data.error ?? `Lỗi ${r.status}`);
       return data;
     },
-    [token], // eslint-disable-line react-hooks/exhaustive-deps
+    [authed], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  function logout(reason = "") {
-    localStorage.removeItem("token");
-    setToken(""); setKeys(null); setOpen(null); setResults(null); setErr(reason);
+  function logout(reason = "", server = false) {
+    if (server) void fetch("/api/admin/login", { method: "DELETE", headers: { "x-requested-with": "xoaykey" } }).catch(() => {});
+    localStorage.removeItem("authed");
+    setAuthed(false); setKeys(null); setOpen(null); setResults(null); setErr(reason);
   }
 
   const login = (e: React.FormEvent) => {
@@ -121,13 +124,13 @@ export default function App() {
         const r = await fetch("/api/admin/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: user.trim(), password: pass }),
+          body: JSON.stringify({ username: user.trim(), password: pass, otp: otp.trim() }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error ?? `Lỗi ${r.status}`);
-        localStorage.setItem("token", data.token);
-        setPass("");
-        setToken(data.token); // vào panel ngay, effect bên dưới sẽ tải danh sách
+        localStorage.setItem("authed", "1");
+        setPass(""); setOtp("");
+        setAuthed(true); // vào panel ngay, effect bên dưới sẽ tải danh sách
       } catch (e2) { setErr((e2 as Error).message); }
     });
   };
@@ -137,7 +140,10 @@ export default function App() {
     try { setKeys(await call("keys")); } catch (e) { say((e as Error).message); }
   }, [call]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (token) void track(fetchKeys); }, [token]); // eslint-disable-line
+  useEffect(() => { if (authed) void track(fetchKeys); }, [authed]); // eslint-disable-line
+  useEffect(() => {
+    fetch("/api/admin/login").then((r) => r.json()).then((d) => setOtpNeeded(!!d.otp)).catch(() => {});
+  }, []);
 
   const act = (fn: () => Promise<unknown>, ok?: string) =>
     track(async () => {
@@ -166,7 +172,7 @@ export default function App() {
 
   const copy = (s: string) => navigator.clipboard.writeText(s).then(() => say("Đã sao chép"));
 
-  if (!token)
+  if (!authed)
     return (
       <div className={`login${loading ? " busy" : ""}`}>
         <div className={`progress${loading ? " on" : ""}`} />
@@ -176,7 +182,8 @@ export default function App() {
         <form onSubmit={login}>
           <input className="in" autoFocus autoComplete="username" placeholder="Tài khoản" value={user} onChange={(e) => setUser(e.target.value)} />
           <input className="in" type="password" autoComplete="current-password" placeholder="Mật khẩu" value={pass} onChange={(e) => setPass(e.target.value)} />
-          <button className="btn pri" disabled={!user.trim() || !pass || loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
+          {otpNeeded && <input className="in" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Mã 2FA (6 số)" value={otp} onChange={(e) => setOtp(e.target.value)} />}
+          <button className="btn pri" disabled={!user.trim() || !pass || (otpNeeded && otp.trim().length !== 6) || loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
         </form>
         {err && <p className="err">{err}</p>}
       </div>
@@ -208,7 +215,7 @@ export default function App() {
         <div className="stats">
           <span className="chip"><b>{ready.length}</b> sẵn sàng</span>
           <span className="chip"><b>{list.length}</b> tổng</span>
-          <button className="btn sm ghost" onClick={() => logout()}>Đăng xuất</button>
+          <button className="btn sm ghost" onClick={() => logout("", true)}>Đăng xuất</button>
         </div>
       </div>
 

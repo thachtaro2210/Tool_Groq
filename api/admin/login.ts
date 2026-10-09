@@ -1,17 +1,43 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { issueToken, safeEqual } from "../_lib/auth.js";
+import { endSession, safeEqual, startSession, totpEnabled, verifyTotp } from "../_lib/auth.js";
+import { audit, clientIp, hit, peek } from "../_lib/guard.js";
 
+/**
+ * GET    -> { otp }       có yêu cầu mã 2FA không
+ * POST   -> đăng nhập (đặt cookie HttpOnly)
+ * DELETE -> đăng xuất; ?all=1 thu hồi mọi phiên
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method === "GET") return void res.json({ otp: totpEnabled() });
+
+  if (req.method === "DELETE") {
+    if (req.headers["x-requested-with"] !== "xoaykey") return void res.status(400).json({ error: "Bad request" });
+    await endSession(req, res, req.query.all === "1");
+    return void res.json({ ok: true });
+  }
   if (req.method !== "POST") return void res.status(405).json({ error: "Method not allowed" });
-  const { username, password } = req.body ?? {};
+
+  const ip = clientIp(req);
+  if ((await peek(`lf:${ip}`, 900)) >= 5) {
+    await audit(req, "login", false, "locked");
+    return void res.status(429).json({ error: "Sai quá nhiều lần, thử lại sau 15 phút" });
+  }
+
+  const { username, password, otp } = req.body ?? {};
   const u = process.env.ADMIN_USER || "admin";
   const p = process.env.ADMIN_PASSWORD;
-  // So sánh cả hai để không lộ trường nào sai
+  // Luôn chạy đủ cả ba kiểm tra để không lộ phần nào sai
   const okUser = safeEqual(String(username ?? ""), u);
-  const okPass = !!p && safeEqual(String(password ?? ""), p);
-  if (!okUser || !okPass) {
-    await new Promise((r) => setTimeout(r, 600)); // làm chậm dò mật khẩu
-    return void res.status(401).json({ error: "Sai tài khoản hoặc mật khẩu" });
+  const okPass = !!p && p.length >= 12 && safeEqual(String(password ?? ""), p);
+  const okOtp = totpEnabled() ? await verifyTotp(String(otp ?? "")) : true;
+  if (!okUser || !okPass || !okOtp) {
+    await hit(`lf:${ip}`, 900);
+    await audit(req, "login", false);
+    await new Promise((r) => setTimeout(r, 600));
+    return void res.status(401).json({ error: "Sai thông tin đăng nhập" });
   }
-  res.json({ token: issueToken() });
+  await startSession(req, res);
+  await audit(req, "login", true);
+  res.json({ ok: true });
 }
