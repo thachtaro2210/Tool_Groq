@@ -42,7 +42,12 @@ if (process.env.NODE_DNS_SERVERS) dns.setServers(process.env.NODE_DNS_SERVERS.sp
 let clientPromise: Promise<MongoClient> | undefined;
 let ready: Promise<void> | undefined;
 
+const SETUP_VERSION = "setup-v1";
+
 async function setup(db: Db) {
+  // Đã chạy rồi thì chỉ tốn 1 lượt gọi, không làm lại ở mỗi lần khởi động nguội
+  const meta = db.collection<{ _id: string }>("meta");
+  if (await meta.findOne({ _id: SETUP_VERSION })) return;
   const keys = db.collection<KeyDoc & { key?: string }>("keys");
   // Index unique cũ trên `key` phải bỏ trước, nếu không việc xoá trường `key` sẽ đụng nhau ở null
   await keys.dropIndex("key_1").catch(() => {});
@@ -53,10 +58,13 @@ async function setup(db: Db) {
       { $set: { keyEnc: encrypt(d.key!), keyHash: keyHash(d.key!), keyMask: maskKey(d.key!) }, $unset: { key: "" } },
     );
   }
-  await keys.createIndex({ keyHash: 1 }, { unique: true, partialFilterExpression: { keyHash: { $exists: true } } });
-  await db.collection("sessions").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
-  await db.collection("ratelimit").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
-  await db.collection("audit").createIndex({ at: 1 }, { expireAfterSeconds: 30 * 86400 });
+  await Promise.all([
+    keys.createIndex({ keyHash: 1 }, { unique: true, partialFilterExpression: { keyHash: { $exists: true } } }),
+    db.collection("sessions").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 }),
+    db.collection("ratelimit").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 }),
+    db.collection("audit").createIndex({ at: 1 }, { expireAfterSeconds: 30 * 86400 }),
+  ]);
+  await meta.updateOne({ _id: SETUP_VERSION }, { $set: { at: Date.now() } }, { upsert: true });
 }
 
 async function db(): Promise<Db> {

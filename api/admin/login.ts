@@ -30,8 +30,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     await new Promise((r) => setTimeout(r, 600));
     return void res.status(401).json({ error: "Sai thông tin đăng nhập" });
   }
-  await startSession(req, res);
-  await audit(req, "login", true);
+  await Promise.all([startSession(req, res), audit(req, "login", true)]);
   res.json({ ok: true });
 }
 
