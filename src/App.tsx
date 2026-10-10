@@ -28,7 +28,6 @@ const left = (t: number) => {
   return m >= 60 ? `${Math.floor(m / 60)} giờ ${m % 60} phút` : `${m} phút`;
 };
 const n = (v?: number) => (v === undefined ? "—" : v.toLocaleString("vi-VN"));
-const mask = (k: string) => `${k.slice(0, 8)}...${k.slice(-4)}`;
 
 function Meter({ label, rem, lim, reset }: { label: string; rem?: number; lim?: number; reset?: string }) {
   if (rem === undefined || !lim) return null;
@@ -387,7 +386,7 @@ export default function App() {
               <div className="rrow" key={key}>
                 <span className={`dot ${res.ok ? (res.limited ? "rest" : "ready") : "invalid"}`} />
                 <div className="main">
-                  <div className="kname">{mask(key)}</div>
+                  <div className="kname">{key}</div>
                   <div className="meta">
                     {res.ok
                       ? `${res.models.length} model hoạt động${res.limits?.tokensRemaining !== undefined ? ` · còn ${n(res.limits.tokensRemaining)} token/phút` : ""}${res.limited ? " · đang chạm hạn mức" : ""}`

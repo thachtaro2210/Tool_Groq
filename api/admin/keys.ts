@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "../_lib/auth.js";
 import { safe } from "../_lib/guard.js";
-import { encrypt, keyHash } from "../_lib/crypto.js";
+import { decrypt, encrypt, keyHash } from "../_lib/crypto.js";
 import { keysCol, maskKey } from "../_lib/db.js";
 
 const GROQ_KEY = /^gsk_[A-Za-z0-9]{20,200}$/;
@@ -16,7 +16,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const docs = await col.find().sort({ createdAt: -1 }).toArray();
     return void res.json(
-      docs.map(({ keyEnc, keyHash: _h, keyMask, ...d }) => ({ ...d, _id: d._id.toString(), key: keyMask })),
+      docs.map(({ keyEnc, keyHash: _h, keyMask: _m, ...d }) => ({ ...d, _id: d._id.toString(), key: decrypt(keyEnc) })),
     );
   }
 
