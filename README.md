@@ -1,4 +1,4 @@
-# Xoay Key Groq
+# KeyRelay
 
 Quản lý nhiều key Groq và tự đổi key khi hết token. React + Vite + TS, backend là Vercel Serverless Functions (`/api`), DB MongoDB Atlas.
 

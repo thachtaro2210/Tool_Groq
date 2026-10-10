@@ -301,8 +301,8 @@ export default function App() {
     return (
       <div className={`login${loading ? " busy" : ""}`}>
         <div className={`progress${loading ? " on" : ""}`} />
-        <img className="logo big" src="/logo.svg" alt="Xoay Key" />
-        <h1>Xoay Key</h1>
+        <img className="logo big" src="/logo.svg" alt="KeyRelay" />
+        <h1>KeyRelay</h1>
         <p className="sub">Đăng nhập để quản lý key Groq</p>
         <form onSubmit={login}>
           <input className="in" autoFocus autoComplete="username" placeholder="Tài khoản" value={user} onChange={(e) => setUser(e.target.value)} />
@@ -333,7 +333,7 @@ export default function App() {
         <div className="brand">
           <img className="logo" src="/logo.svg" alt="" />
           <div>
-            <h1>Xoay Key</h1>
+            <h1>KeyRelay</h1>
             <p className="sub">Key Groq tự đổi khi hết token.</p>
           </div>
         </div>
