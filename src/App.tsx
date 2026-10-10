@@ -67,6 +67,131 @@ function Detail({ c, busy, onCheck }: { c?: Check; busy: boolean; onCheck: () =>
   );
 }
 
+// Giá tham khảo Groq (USD / 1 triệu token) — có thể sửa trực tiếp trong ô nhập
+const PRICES: Record<string, [number, number]> = {
+  "llama-3.1-8b-instant": [0.05, 0.08],
+  "llama-3.3-70b-versatile": [0.59, 0.79],
+  "openai/gpt-oss-20b": [0.075, 0.3],
+  "openai/gpt-oss-120b": [0.15, 0.6],
+  "meta-llama/llama-4-scout-17b-16e-instruct": [0.11, 0.34],
+  "meta-llama/llama-4-maverick-17b-128e-instruct": [0.2, 0.6],
+  "qwen/qwen3-32b": [0.29, 0.59],
+  "moonshotai/kimi-k2-instruct": [1, 3],
+};
+const store = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const usd = (v: number) => `$${v >= 1 ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : v.toLocaleString("en-US", { maximumSignificantDigits: 2 })}`;
+const vnd = (v: number) => `${Math.round(v).toLocaleString("vi-VN")}đ`;
+
+function Num({ label, value, onChange, step = 1, suffix }: { label: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string }) {
+  return (
+    <label className="fld">
+      <span>{label}</span>
+      <div className="fin">
+        <input className="in" type="number" min={0} step={step} value={Number.isFinite(value) ? value : ""} onChange={(e) => onChange(Math.max(0, parseFloat(e.target.value) || 0))} />
+        {suffix && <em>{suffix}</em>}
+      </div>
+    </label>
+  );
+}
+
+function CostPanel({ keys, ready }: { keys: Key[]; ready: Key[] }) {
+  const [model, setModel] = useState(() => store("cost.model", "llama-3.3-70b-versatile"));
+  const [pin, setPin] = useState(() => PRICES[model]?.[0] ?? 0.59);
+  const [pout, setPout] = useState(() => PRICES[model]?.[1] ?? 0.79);
+  const [tin, setTin] = useState(() => Number(store("cost.tin", "1500")));
+  const [tout, setTout] = useState(() => Number(store("cost.tout", "500")));
+  const [rpd, setRpd] = useState(() => Number(store("cost.rpd", "2000")));
+  const [rate, setRate] = useState(() => Number(store("cost.rate", "25000")));
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cost.model", model); localStorage.setItem("cost.tin", String(tin));
+      localStorage.setItem("cost.tout", String(tout)); localStorage.setItem("cost.rpd", String(rpd)); localStorage.setItem("cost.rate", String(rate));
+    } catch { /* bỏ qua */ }
+  }, [model, tin, tout, rpd, rate]);
+
+  const pick = (m: string) => { setModel(m); if (PRICES[m]) { setPin(PRICES[m][0]); setPout(PRICES[m][1]); } };
+
+  const sum = (f: (k: Key) => number | undefined, src: Key[]) => src.reduce((a, k) => a + (f(k) ?? 0), 0);
+  const tokLim = sum((k) => k.check?.limits?.tokensLimit, ready);
+  const tokRem = sum((k) => k.check?.limits?.tokensRemaining, ready);
+  const reqLim = sum((k) => k.check?.limits?.requestsLimit, ready);
+  const reqRem = sum((k) => k.check?.limits?.requestsRemaining, ready);
+  const served = sum((k) => k.usageCount, keys);
+
+  const perReq = (tin * pin + tout * pout) / 1e6;
+  const perDay = perReq * rpd;
+  const perMonth = perDay * 30;
+  const tokPerReq = tin + tout;
+  const reqPerMin = tokPerReq ? Math.floor(tokLim / tokPerReq) : 0;
+  const perKeyReq = ready.length && reqLim ? reqLim / ready.length : 0;
+  const perKeyTok = ready.length && tokLim ? tokLim / ready.length : 0;
+  const needByDay = perKeyReq ? Math.ceil(rpd / perKeyReq) : 0;
+  const needByMin = perKeyTok ? Math.ceil((rpd * tokPerReq) / 1440 / perKeyTok) : 0;
+  const need = Math.max(needByDay, needByMin);
+
+  return (
+    <aside className="side">
+      <section className="panel pad">
+        <h2 className="ptitle">Dung lượng hệ thống</h2>
+        <div className="kpis">
+          <div className="kpi"><span>Key sẵn sàng</span><b>{ready.length}<small> / {keys.length}</small></b></div>
+          <div className="kpi"><span>Đã cấp key</span><b>{n(served)}<small> lần</small></b></div>
+        </div>
+        {tokLim > 0 ? (
+          <div className="stack">
+            <Meter label="Token / phút (gộp)" rem={tokRem} lim={tokLim} />
+            {reqLim > 0 && <Meter label="Request / ngày (gộp)" rem={reqRem} lim={reqLim} />}
+            <p className="hint">Cộng từ {ready.length} key sẵn sàng đã kiểm tra. Mở một key → “Kiểm tra lại” để cập nhật số liệu.</p>
+          </div>
+        ) : (
+          <p className="hint">Chưa có số liệu hạn mức. Mở một key và bấm “Kiểm tra lại”.</p>
+        )}
+      </section>
+
+      <section className="panel pad">
+        <h2 className="ptitle">Tính chi phí</h2>
+        <label className="fld">
+          <span>Model</span>
+          <select className="in" value={model} onChange={(e) => pick(e.target.value)}>
+            {!PRICES[model] && <option value={model}>Tuỳ chỉnh</option>}
+            {Object.keys(PRICES).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+        <div className="grid2">
+          <Num label="Giá input" value={pin} step={0.01} onChange={(v) => { setPin(v); setModel("custom"); }} suffix="$/1M" />
+          <Num label="Giá output" value={pout} step={0.01} onChange={(v) => { setPout(v); setModel("custom"); }} suffix="$/1M" />
+          <Num label="Token vào / request" value={tin} step={100} onChange={setTin} />
+          <Num label="Token ra / request" value={tout} step={50} onChange={setTout} />
+          <Num label="Request / ngày" value={rpd} step={100} onChange={setRpd} />
+          <Num label="Tỷ giá" value={rate} step={500} onChange={setRate} suffix="đ/$" />
+        </div>
+        <div className="bill">
+          <div className="brow"><span>1 request</span><b>{usd(perReq)} <small>≈ {vnd(perReq * rate)}</small></b></div>
+          <div className="brow"><span>1 ngày</span><b>{usd(perDay)} <small>≈ {vnd(perDay * rate)}</small></b></div>
+          <div className="brow tot"><span>1 tháng (30 ngày)</span><b>{usd(perMonth)} <small>≈ {vnd(perMonth * rate)}</small></b></div>
+        </div>
+        <p className="hint">Giá tham khảo của Groq nếu dùng gói trả phí. Key free thì chi phí thực tế là 0đ — đây là số tiền bạn tiết kiệm được.</p>
+      </section>
+
+      <section className="panel pad">
+        <h2 className="ptitle">Ước tính tải</h2>
+        <div className="bill">
+          <div className="brow"><span>Token / request</span><b>{n(tokPerReq)}</b></div>
+          <div className="brow"><span>Token / ngày cần</span><b>{n(rpd * tokPerReq)}</b></div>
+          <div className="brow"><span>Tối đa / phút (pool)</span><b>{tokLim ? `${n(reqPerMin)} request` : "—"}</b></div>
+          <div className="brow"><span>Hạn mức / ngày (pool)</span><b>{reqLim ? `${n(reqLim)} request` : "—"}</b></div>
+          <div className="brow tot"><span>Đánh giá</span>
+            <b className={need > ready.length ? "badtxt" : "oktxt"}>
+              {!need ? "Chưa đủ dữ liệu" : need > ready.length ? `Thiếu ~${need - ready.length} key` : `Đủ (cần ~${need} key)`}
+            </b>
+          </div>
+        </div>
+      </section>
+    </aside>
+  );
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(() => localStorage.getItem("authed") === "1"); // chỉ là cờ giao diện, phiên thật nằm ở cookie HttpOnly
   const [otpNeeded, setOtpNeeded] = useState(false);
@@ -259,7 +384,8 @@ export default function App() {
         )}
       </section>
 
-      <section className="panel">
+      <div className="cols">
+      <section className="panel listpanel">
         {keys === null ? (
           <div className="skel">
             <div className="loadmsg"><img className="logo spinlogo" src="/logo.svg" alt="" />Đang tải danh sách key...</div>
@@ -307,6 +433,8 @@ export default function App() {
           <div className="empty"><b>Chưa có key nào</b>Dán key Groq ở trên để bắt đầu.</div>
         )}
       </section>
+      {keys !== null && <CostPanel keys={list} ready={ready} />}
+      </div>
 
       <details className="panel">
         <summary><span className="ptitle" style={{ margin: 0 }}>Tích hợp với bên B</span></summary>
