@@ -10,8 +10,20 @@
   --serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
   --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
+/* Giao diện: data-theme = light (kem Claude) | dark; không đặt thì theo hệ thống */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1f1e1d; --surface: #2a2927; --sunk: #232220;
+    --fg: #f0eee6; --mut: #a3a097; --bd: #3a3835; --bd2: #4a4743;
+    --ac: #d97757; --ac-h: #e58b6d; --ac-soft: #3b2a24;
+    --ok: #7fbf8e; --ok-soft: #26352a;
+    --warn: #e0b265; --warn-soft: #3a2f1a;
+    --bad: #e07a7a; --bad-soft: #3b2525;
+    --off: #a3a097; --off-soft: #33312e;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #1f1e1d; --surface: #2a2927; --sunk: #232220;
     --fg: #f0eee6; --mut: #a3a097; --bd: #3a3835; --bd2: #4a4743;
@@ -222,3 +234,10 @@ select.in { width: 100%; background: var(--bg); border: 1px solid var(--bd2); bo
 .brow b { font-weight: 600; text-align: right; }
 .brow.tot b { color: var(--ac); }
 .brow b.oktxt { color: var(--ok); } .brow b.badtxt { color: var(--bad); }
+
+/* Chọn giao diện */
+.theme { display: inline-flex; background: var(--surface); border: 1px solid var(--bd); border-radius: 999px; padding: 2px; }
+.theme button { border: 0; background: none; color: var(--mut); border-radius: 999px; padding: 3px 11px; font-size: 13px; cursor: pointer; transition: background .15s, color .15s; }
+.theme button:hover { color: var(--fg); }
+.theme button.on { background: var(--ac-soft); color: var(--ac); font-weight: 500; }
+.theme-float { position: fixed; top: 14px; right: 14px; z-index: 40; }

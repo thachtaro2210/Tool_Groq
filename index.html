@@ -4,11 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#d97757" />
+    <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
     <title>KeyRelay</title>
     <style>
       body { margin: 0; background: #faf9f5; }
-      @media (prefers-color-scheme: dark) { body { background: #1f1e1d; } }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme]) body { background: #1f1e1d; } }
+      :root[data-theme="dark"] body { background: #1f1e1d; }
       .splash { position: fixed; inset: 0; display: grid; place-items: center; }
       .splash img { width: 84px; height: 84px; border-radius: 20px; animation: sp 1.6s ease-in-out infinite; }
       @keyframes sp { 50% { transform: scale(.88) rotate(30deg); opacity: .7; } }

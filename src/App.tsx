@@ -192,6 +192,26 @@ function CostPanel({ keys, ready }: { keys: Key[]; ready: Key[] }) {
   );
 }
 
+type Theme = "auto" | "light" | "dark";
+const THEMES: [Theme, string][] = [["light", "Sáng"], ["dark", "Tối"], ["auto", "Tự động"]];
+
+function ThemeSwitch({ className = "" }: { className?: string }) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    const t = store("theme", "auto");
+    return t === "light" || t === "dark" ? t : "auto";
+  });
+  useEffect(() => {
+    const el = document.documentElement;
+    if (theme === "auto") delete el.dataset.theme; else el.dataset.theme = theme;
+    try { theme === "auto" ? localStorage.removeItem("theme") : localStorage.setItem("theme", theme); } catch { /* bỏ qua */ }
+  }, [theme]);
+  return (
+    <div className={`theme ${className}`} role="group" aria-label="Giao diện">
+      {THEMES.map(([t, l]) => <button key={t} className={theme === t ? "on" : ""} aria-pressed={theme === t} onClick={() => setTheme(t)}>{l}</button>)}
+    </div>
+  );
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(() => localStorage.getItem("authed") === "1"); // chỉ là cờ giao diện, phiên thật nằm ở cookie HttpOnly
   const [otpNeeded, setOtpNeeded] = useState(false);
@@ -300,6 +320,7 @@ export default function App() {
   if (!authed)
     return (
       <div className={`login${loading ? " busy" : ""}`}>
+        <ThemeSwitch className="theme-float" />
         <div className={`progress${loading ? " on" : ""}`} />
         <img className="logo big" src="/logo.svg" alt="KeyRelay" />
         <h1>KeyRelay</h1>
@@ -340,6 +361,7 @@ export default function App() {
         <div className="stats">
           <span className="chip"><b>{ready.length}</b> sẵn sàng</span>
           <span className="chip"><b>{list.length}</b> tổng</span>
+          <ThemeSwitch />
           <button className="btn sm ghost" onClick={() => logout("", true)}>Đăng xuất</button>
         </div>
       </div>
